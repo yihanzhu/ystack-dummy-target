@@ -34,9 +34,14 @@ changed lines across those three files.
 3. Extend `test/greet.test.sh` with the R1 case (`-u ystack` → `HELLO, YSTACK`),
    the R2 case (`-u` → `HELLO, WORLD`), and the R5 unknown-option case. The
    script runs under `set -eu`, so a failing command would abort it: capture the
-   status deliberately, either with the
-   `if out=$(sh "$here/../src/greet.sh" -x 2>err); then fail; else status=$?; fi`
-   shape or by wrapping the call in `set +e` / `set -e`. Assert three things
+   status deliberately, either with an
+   `if out=$(...); then fail; else status=$?; fi` shape or by wrapping the call
+   in `set +e` / `set -e`. Capture stderr without writing into the repository:
+   read it into a variable inside that shape with
+   `err=$(sh "$here/../src/greet.sh" -x 2>&1 >/dev/null)`, or use a temp file
+   from `mktemp "${TMPDIR:-/tmp}/greet.XXXXXX"` and remove it afterwards with an
+   explicit `rm -f` or a `trap`. Never redirect to a bare relative path such as
+   `2>err`: the test must leave the working tree clean. Assert three things
    separately: stdout is empty, stderr is exactly the one usage line, status is
    non-zero. Keep `echo "ok - greet"` as the last line and the only success
    output. (R1, R2, R5, R8)
@@ -45,8 +50,10 @@ changed lines across those three files.
 5. Run `sh test/greet.test.sh` locally. That is exactly the command the `ci` job
    runs. (R8, R10)
 6. Commit and open the implementation pull request with `Closes #1` in the body.
-   Confirm the `ci` check is green and that the diff touches only the three
-   files. (R10, R11, R12)
+   This is the one PR that closes the intake: ystack's chain rule keeps the
+   intake open through intent, spec and plan (those used `Tracks #1`), and the
+   implementation PR closes it on merge. Confirm the `ci` check is green and that
+   the diff touches only the three files. (R10, R11, R12)
 
 ## Risks
 
@@ -63,6 +70,10 @@ changed lines across those three files.
   `out=$(... ) ; status=$?` aborts before `status` is read. Use the `if`
   form or a scoped `set +e`, and check that the test still fails loudly when the
   script is wrong (temporarily break `src/greet.sh` once to confirm).
+- **Stray files left by the tests.** Redirecting stderr to a relative path drops
+  an untracked file into the repository root when CI runs the test script. Keep
+  stderr in a variable or a `mktemp` file under `${TMPDIR:-/tmp}` that the test
+  removes; the last Proof bullet plus a clean `git status` catches a slip.
 - **Rejected alternative: a `getopts` loop.** It would handle flag ordering,
   bundling and repeats — all out of scope. Only one flag, only in first position,
   is in scope, so a `getopts` loop adds surface the spec did not ask for. A
